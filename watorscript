@@ -1,0 +1,186 @@
+#!/bin/bash 
+   #
+   # \file watorscript
+   # \author Mattia villani
+   #  Si dichiara che il contenuto di questo file e' in ogni sua parte opera
+   #  originale dell' autore. 
+
+#Variables 
+#Max args ( set to 2 to enable either s and f option to work )
+max_arg=1;
+#num of args
+i=0;
+#option -s pressed
+SFlag=false;
+#option -f pressed
+FFlag=false;
+#file
+filename="";
+#consts
+NO="NO";
+YES="OK";
+
+function usage() {
+	if (( $# == 1 )) 
+	then 
+		echo "ERROR : $1" >/dev/stderr;
+	fi
+	echo "USAGE : $0 [-{c|f}] file" >/dev/stderr;
+	exit 1;
+}
+
+function WRITENO(){
+	echo $NO>/dev/stderr;
+	exit 1;
+}
+
+function isint() {
+	#Try to use $1 int. if it is not then it will write on the stderr
+	if [ $(expr $1 + 1 2> /dev/null) ]
+	then	
+		return 0 ;
+	else
+		WRITENO;
+	fi ;
+}
+
+function process() {
+	exec 0< $filename;
+	#redirect of input from filename;
+	NF=0;
+	NS=0;
+	#Fish and shark counter
+	count=0;
+	#n row counter
+	read -r nrow;
+	read -r ncol;
+	isint $nrow
+	isint $ncol
+	#test if nrow and ncol are integer.
+	while read -r -a array 
+	#read and write in array the line splitted on spaces
+	do
+		if (( ${#array[@]} != $ncol ))
+		then 
+			WRITENO;
+		fi
+		for j in ${array[*]}
+		do
+			case $j in
+				F ) ((NF++)) ;;
+				S ) ((NS++)) ;;
+				W ) ;;
+				* )	WRITENO;;
+				#only FSW are tollerated
+			esac
+		done
+		((count++));
+		#increments row conter
+	done
+	if (( $count != $nrow )) 
+	then 
+		#there must be exactly nrow rows
+		WRITENO;
+	else
+		if $SFlag 
+		then
+			echo $NS;
+		else
+			if $FFlag
+			then
+				echo $NF;
+			fi
+		fi
+	fi
+	echo $YES>/dev/stderr;
+	return 0;
+}
+
+##############################################
+	#PHARSING ARGSUMENT
+##############################################
+
+if (($# == 1))  
+then 
+	#there is only one argument MUST be help or file!
+	case $1 in
+		--help ) usage;
+			exit 0;;
+		* ) filename=$1;;
+		#if it isn't a file, later will be found out
+	esac 
+else
+	#check rep
+	cr=0;
+	for cmd in $@ 
+	do
+		if [[ $cmd == -* ]]
+			then (( cr++ ))
+		fi
+	done
+	if (( $cr >= 2 )) 
+		then usage "Too many options"; exit 1; 
+	fi
+	#
+	iter=0;	
+	while (( $iter<2 )) 
+	#Looping over getopts is possible to detect opt2 in this case: FILE [opt2]
+	# 2 is max iters since [opt] can occour only before xor after FILE
+	do 
+		while getopts "fs" option
+		#only fs are supported
+		do
+			((i++)); 
+			#counting how many option are inserted
+			if (( $i > $max_arg )) 
+			then usage "Too many options ( only one supported )" ; exit 1;
+			#only -f or -s are supported but not both
+			fi
+			case $option in
+				f ) FFlag=true;;
+				s ) SFlag=true;;
+				* ) usage "Unsupported option: $OPTARG"; exit 1;;
+			esac
+		done
+		#when iter is 0 then [opt1] have been read
+		#else [opt2] in
+		# [opt1] file [opt2] 
+		if (( $iter == 0 )) 
+		then 
+			# exec only in the first iteration since it should resolve
+			# [-opt] file [-opt] problem
+			shift $((OPTIND-1))
+			#shilft $1 till optind-1
+			if [ $# -gt 0 ] 
+			then 
+				#file in format: [opt] FILE [opt]
+				filename=$1; 
+			else 
+				#first iteration=>After [option] there should be a file!
+				usage "Missing argument";
+				exit 1;
+			fi		
+
+			shift 1;
+			#otherwise getopts would stuck again
+		fi
+		((iter++))
+	done
+fi
+
+
+#check if file exists
+if [ -e $filename ]
+then 
+	#argument exits and it's a file
+	#invoke actual script
+	process
+	exit 0;
+else
+	#argument exits but isn't a regular file
+	usage "Argument isn't a file";
+	exit 1;
+fi
+
+
+
